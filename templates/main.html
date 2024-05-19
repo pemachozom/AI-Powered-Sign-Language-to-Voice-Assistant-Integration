@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Model Integration</title>
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='main.css') }}">
+</head>
+<body>
+    <h1>SignLang to Text</h1>
+    <h2>Predict using file upload.</h2>
+    <form id="uploadForm" action="/predict" method="post" enctype="multipart/form-data">
+        <input type="file" name="file" accept="video/mp4">
+        <button type="submit">Predict</button>
+    </form>
+    <div id="filePredictionOutput"></div>
+    <h2>Predict using webcam.</h2>
+    
+    <div>
+        <button id="startButton">Start Recording</button>
+        <button id="stopButton" disabled>Stop Recording</button>
+        <button id="uploadButton" disabled>Upload and Predict</button>
+    </div>
+    <div class="video-container">
+        <video id="previewVideo" width="640" height="480" autoplay></video>
+        <video id="recordedVideo" width="640" height="480" controls></video>
+    </div>
+    <div id="webcamPredictionOutput"></div>
+
+    <script>
+        const uploadForm = document.getElementById('uploadForm');
+        const startButton = document.getElementById('startButton');
+        const stopButton = document.getElementById('stopButton');
+        const uploadButton = document.getElementById('uploadButton');
+        const previewVideo = document.getElementById('previewVideo');
+        const recordedVideo = document.getElementById('recordedVideo');
+        const filePredictionOutput = document.getElementById('filePredictionOutput');
+        const webcamPredictionOutput = document.getElementById('webcamPredictionOutput');
+        let mediaRecorder;
+        let recordedChunks = [];
+
+        startButton.addEventListener('click', startRecording);
+        stopButton.addEventListener('click', stopRecording);
+        uploadButton.addEventListener('click', uploadVideo);
+
+        uploadForm.addEventListener('submit', function(event) {
+            event.preventDefault();
+            const formData = new FormData(uploadForm);
+
+            fetch('/predict', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                filePredictionOutput.innerText = `Predicted output: ${data.predicted_class}`;
+            })
+            .catch(error => {
+                console.error('Error uploading video:', error);
+            });
+        });
+
+        function startRecording() {
+            navigator.mediaDevices.getUserMedia({ video: true })
+                .then(stream => {
+                    previewVideo.srcObject = stream;
+                    mediaRecorder = new MediaRecorder(stream);
+                    mediaRecorder.ondataavailable = handleDataAvailable;
+                    mediaRecorder.start();
+                    startButton.disabled = true;
+                    stopButton.disabled = false;
+                })
+                .catch(error => {
+                    console.error('Error accessing webcam:', error);
+                });
+        }
+
+        function stopRecording() {
+            mediaRecorder.stop();
+            startButton.disabled = false;
+            stopButton.disabled = true;
+            uploadButton.disabled = false;
+        }
+
+        function handleDataAvailable(event) {
+            if (event.data.size > 0) {
+                recordedChunks.push(event.data);
+                const recordedBlob = new Blob(recordedChunks, { type: 'video/webm' });
+                recordedVideo.src = URL.createObjectURL(recordedBlob);
+            }
+        }
+
+        function uploadVideo() {
+            const recordedBlob = new Blob(recordedChunks, { type: 'video/webm' });
+            const file = new File([recordedBlob], 'uploaded_video_webcam.mp4', { type: 'video/mp4' });
+            const formData = new FormData();
+            formData.append('file', file);
+
+            fetch('/predict', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                webcamPredictionOutput.innerText = `Predicted Output: ${data.predicted_class}`;
+            })
+            .catch(error => {
+                console.error('Error uploading video:', error);
+            });
+        }
+    </script>
+</body>
+</html>
